@@ -5,29 +5,31 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from collections import Counter
-import random # Adicionado para o gerador
+import random
 
 # Importar funções do script de análise principal
 from lotofacil_core_analysis import (
     load_data,
     analyze_even_odd_per_draw,
+    analyze_primes_per_draw,
     analyze_number_frequency,
     analyze_overdue_numbers,
     analyze_repeated_numbers,
-    generate_numbers_frequency_based, # Nova importação
-    generate_numbers_even_odd_based,  # Nova importação
-    generate_numbers_overdue_based,   # Nova importação
-    generate_numbers_repeated_based   # Nova importação
+    generate_numbers_frequency_based,
+    generate_numbers_even_odd_based,
+    generate_numbers_prime_based,
+    generate_numbers_overdue_based,
+    generate_numbers_repeated_based,
+    PRIMES_UP_TO_25
 )
 
-st.set_page_config(layout="wide")
+st.set_page_config(page_title="Lotofácil Dashboard", layout="wide")
 
 # --- Funções de Plotagem Adaptadas para Streamlit ---
 def plot_number_frequency_st(number_counts):
-    sorted_counts = sorted(number_counts.items())
+    sorted_counts = sorted(number_counts.items(), key=lambda x: int(x[0]))
     numbers = [item[0] for item in sorted_counts]
     counts = [item[1] for item in sorted_counts]
-    
     fig, ax = plt.subplots(figsize=(12, 6))
     sns.barplot(x=numbers, y=counts, ax=ax, palette="viridis")
     ax.set_title("Frequência dos Números na Lotofácil")
@@ -37,34 +39,47 @@ def plot_number_frequency_st(number_counts):
     plt.tight_layout()
     st.pyplot(fig)
 
+
 def plot_even_odd_distribution_st(df_even_odd):
-    count_pares_por_sorteio = df_even_odd["Pares"].value_counts().sort_index()
+    count_data = df_even_odd["Pares"].value_counts().sort_index()
     fig, ax = plt.subplots(figsize=(10, 6))
-    sns.barplot(x=count_pares_por_sorteio.index, y=count_pares_por_sorteio.values, ax=ax, palette="coolwarm")
+    sns.barplot(x=count_data.index, y=count_data.values, ax=ax, palette="coolwarm")
     ax.set_title("Distribuição da Quantidade de Números Pares por Sorteio")
     ax.set_xlabel("Quantidade de Números Pares no Sorteio")
     ax.set_ylabel("Número de Sorteios")
     plt.tight_layout()
     st.pyplot(fig)
 
+
+def plot_primes_distribution_st(df_primes):
+    count_data = df_primes["Primos"].value_counts().sort_index()
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.barplot(x=count_data.index, y=count_data.values, ax=ax, palette="crest")
+    ax.set_title("Distribuição da Quantidade de Números Primos por Sorteio")
+    ax.set_xlabel("Quantidade de Números Primos no Sorteio")
+    ax.set_ylabel("Número de Sorteios")
+    plt.tight_layout()
+    st.pyplot(fig)
+
+
 def plot_repeated_numbers_distribution_st(df_repeated):
     if df_repeated.empty or "Repetidos" not in df_repeated.columns:
         st.write("Não há dados suficientes para exibir o gráfico de números repetidos.")
         return
-    count_repetidos = df_repeated["Repetidos"].value_counts().sort_index()
+    count_data = df_repeated["Repetidos"].value_counts().sort_index()
     fig, ax = plt.subplots(figsize=(10, 6))
-    sns.barplot(x=count_repetidos.index, y=count_repetidos.values, ax=ax, palette="mako")
+    sns.barplot(x=count_data.index, y=count_data.values, ax=ax, palette="mako")
     ax.set_title("Distribuição da Quantidade de Números Repetidos do Sorteio Anterior")
     ax.set_xlabel("Quantidade de Números Repetidos")
     ax.set_ylabel("Número de Sorteios")
     plt.tight_layout()
     st.pyplot(fig)
 
+
 def plot_overdue_numbers_st(overdue_counts):
     sorted_overdue = sorted(overdue_counts.items(), key=lambda item: item[1], reverse=True)
     numbers = [item[0] for item in sorted_overdue]
     cycles = [item[1] for item in sorted_overdue]
-    
     fig, ax = plt.subplots(figsize=(12, 6))
     sns.barplot(x=numbers, y=cycles, ax=ax, palette="rocket")
     ax.set_title("Números Mais Atrasados (Ciclos)")
@@ -73,6 +88,7 @@ def plot_overdue_numbers_st(overdue_counts):
     ax.tick_params(axis="x", rotation=90)
     plt.tight_layout()
     st.pyplot(fig)
+
 
 # --- Interface Streamlit ---
 st.title("Análise Estatística e Gerador de Jogos da Lotofácil")
@@ -83,173 +99,134 @@ try:
     st.success("Dados carregados com sucesso!")
     st.write(f"{len(df)} sorteios carregados após limpeza de dados.")
 except FileNotFoundError:
-    st.error("Arquivo lotofacil.csv não encontrado. Verifique o caminho no script `lotofacil_core_analysis.py` ou coloque o arquivo no diretório correto.")
+    st.error("Arquivo lotofacil.csv não encontrado. Verifique o caminho no core analysis.")
     st.stop()
 except Exception as e:
-    st.error(f"Ocorreu um erro ao carregar os dados: {e}")
+    st.error(f"Erro ao carregar dados: {e}")
     st.stop()
 
 st.sidebar.header("Configurações")
-
-# Opções de Análise ou Geração
 app_mode = st.sidebar.selectbox(
     "Escolha o modo:",
-    [
-        "Análise Estatística",
-        "Gerador de Jogos"
-    ]
+    ["Análise Estatística", "Gerador de Jogos"]
 )
 
+# --- Análise Estatística ---
 if app_mode == "Análise Estatística":
     st.sidebar.subheader("Opções de Análise")
     analysis_type = st.sidebar.selectbox(
-        "Escolha o tipo de análise:",
+        "Tipo de análise:",
         [
             "Frequência dos Números",
-            "Distribuição Pares/Ímpares por Sorteio",
-            "Números Atrasados (Ciclos)",
-            "Números Repetidos do Sorteio Anterior"
+            "Distribuição Pares/Ímpares",
+            "Distribuição de Primos",
+            "Números Atrasados",
+            "Números Repetidos"
         ]
     )
 
     if analysis_type == "Frequência dos Números":
         st.header("Frequência dos Números Sorteados")
-        number_frequencies = analyze_number_frequency(df, dezenas_cols)
-        plot_number_frequency_st(number_frequencies)
-        st.subheader("Dados de Frequência (Número: Vezes Sorteado)")
-        st.json(dict(sorted(number_frequencies.items())))
+        freqs = analyze_number_frequency(df, dezenas_cols)
+        plot_number_frequency_st(freqs)
+        st.dataframe(pd.DataFrame(sorted(freqs.items()), columns=["Número","Frequência"]))
 
-    elif analysis_type == "Distribuição Pares/Ímpares por Sorteio":
-        st.header("Análise de Pares e Ímpares por Sorteio")
-        even_odd_df = analyze_even_odd_per_draw(df, dezenas_cols)
-        plot_even_odd_distribution_st(even_odd_df)
-        st.subheader("Estatísticas da Quantidade de Pares por Sorteio")
-        st.dataframe(even_odd_df["Pares"].value_counts(normalize=True).sort_index().reset_index(name="Percentual").style.format({"Percentual": "{:.2%}"}))
-        st.subheader("Dados Detalhados (Primeiros 100 Sorteios)")
-        st.dataframe(even_odd_df.head(100))
+    elif analysis_type == "Distribuição Pares/Ímpares":
+        st.header("Distribuição Pares/Ímpares por Sorteio")
+        eo_df = analyze_even_odd_per_draw(df, dezenas_cols)
+        plot_even_odd_distribution_st(eo_df)
+        st.dataframe(eo_df.head(100))
 
-    elif analysis_type == "Números Atrasados (Ciclos)":
-        st.header("Análise de Números Atrasados (Ciclos)")
-        num_draws_option_cycles = st.sidebar.number_input(
-            "Considerar quantos sorteios anteriores para análise de atraso? (0 para todos)", 
-            min_value=0, 
-            value=100, 
-            step=10,
-            key="cycles_draws_option"
-        )
-        num_draws_to_consider_cycles = None if num_draws_option_cycles == 0 else num_draws_option_cycles
-        
-        if num_draws_to_consider_cycles:
-            st.write(f"Analisando atraso nos últimos {num_draws_to_consider_cycles} sorteios.")
-        else:
-            st.write("Analisando atraso em todos os sorteios disponíveis.")
-            
-        overdue_numbers_data = analyze_overdue_numbers(df, dezenas_cols, num_draws_to_consider=num_draws_to_consider_cycles)
-        plot_overdue_numbers_st(overdue_numbers_data)
-        st.subheader("Dados de Atraso (Número: Sorteios Atrasado)")
-        st.json(dict(sorted(overdue_numbers_data.items(), key=lambda item: item[1], reverse=True)))
+    elif analysis_type == "Distribuição de Primos":
+        st.header("Distribuição de Primos por Sorteio")
+        primes_df = analyze_primes_per_draw(df, dezenas_cols)
+        plot_primes_distribution_st(primes_df)
+        st.dataframe(primes_df.head(100))
 
-    elif analysis_type == "Números Repetidos do Sorteio Anterior":
-        st.header("Análise de Números Repetidos do Sorteio Anterior")
-        repeated_numbers_df = analyze_repeated_numbers(df, dezenas_cols)
-        if not repeated_numbers_df.empty:
-            plot_repeated_numbers_distribution_st(repeated_numbers_df)
-            st.subheader("Estatísticas da Quantidade de Números Repetidos")
-            st.dataframe(repeated_numbers_df["Repetidos"].value_counts(normalize=True).sort_index().reset_index(name="Percentual").style.format({"Percentual": "{:.2%}"}))
-            st.subheader("Dados Detalhados (Primeiros 100 Sorteios com Análise)")
-            st.dataframe(repeated_numbers_df.head(100))
-        else:
-            st.write("Não há dados suficientes para a análise de números repetidos (precisa de pelo menos 2 sorteios).")
+    elif analysis_type == "Números Atrasados":
+        st.header("Análise de Números Atrasados")
+        draws = st.sidebar.number_input("Considerar quantos concursos? (0 para todos)", min_value=0, value=100, step=10)
+        num_draws = None if draws == 0 else draws
+        overdue = analyze_overdue_numbers(df, dezenas_cols, num_draws)
+        plot_overdue_numbers_st(overdue)
+        st.dataframe(pd.DataFrame(sorted(overdue.items(), key=lambda x: x[1], reverse=True), columns=["Número","Atraso"]))
 
+    elif analysis_type == "Números Repetidos":
+        st.header("Números Repetidos do Sorteio Anterior")
+        rep_df = analyze_repeated_numbers(df, dezenas_cols)
+        plot_repeated_numbers_distribution_st(rep_df)
+        st.dataframe(rep_df.head(100))
+
+# --- Gerador de Jogos ---
 elif app_mode == "Gerador de Jogos":
-    st.header("Gerador de Jogos da Lotofácil")
-    st.sidebar.subheader("Opções do Gerador")
+    st.sidebar.subheader("Opções de Geração")
     generator_type = st.sidebar.selectbox(
-        "Escolha o critério de geração:",
+        "Critério de geração:",
         [
-            "Baseado na Frequência",
-            "Baseado em Pares/Ímpares",
-            "Baseado em Números Atrasados",
-            "Baseado em Números Repetidos"
+            "Frequência",
+            "Pares/Ímpares",
+            "Primos",
+            "Atrasados",
+            "Repetidos"
         ]
     )
+    num_games = st.sidebar.number_input("Quantos jogos?", min_value=1, max_value=10, value=1)
+    games = []
 
-    num_games_to_generate = st.sidebar.number_input("Quantos jogos gerar?", min_value=1, max_value=10, value=1, step=1, key="num_games")
+    if generator_type == "Frequência":
+        if st.button("Gerar por Frequência"):
+            freq_counts = analyze_number_frequency(df, dezenas_cols)
+            for _ in range(num_games):
+                games.append(generate_numbers_frequency_based(freq_counts))
 
-    generated_games_list = []
+    elif generator_type == "Pares/Ímpares":
+        evens = st.sidebar.slider("Qtd. de pares", 0, 12, 7)
+        odds = 15 - evens
+        st.sidebar.write(f"Ímpares: {odds}")
+        if st.button("Gerar por Pares/Ímpares"):
+            for _ in range(num_games):
+                games.append(generate_numbers_even_odd_based(evens, odds))
 
-    if generator_type == "Baseado na Frequência":
-        st.subheader("Gerar Jogo Baseado na Frequência dos Números")
-        if st.button("Gerar Jogo(s) por Frequência"):
-            number_frequencies = analyze_number_frequency(df, dezenas_cols)
-            for _ in range(num_games_to_generate):
-                generated_games_list.append(generate_numbers_frequency_based(number_frequencies))
+    elif generator_type == "Primos":
+        max_pr = len(PRIMES_UP_TO_25)
+        prions = st.sidebar.slider("Qtd. de primos", 0, max_pr, min(4, max_pr))
+        st.sidebar.write(f"Não-primos: {15-prions}")
+        if st.button("Gerar por Primos"):
+            for _ in range(num_games):
+                games.append(generate_numbers_prime_based(prions))
 
-    elif generator_type == "Baseado em Pares/Ímpares":
-        st.subheader("Gerar Jogo Baseado na Quantidade de Pares e Ímpares")
-        num_evens = st.sidebar.slider("Quantidade de números pares:", min_value=0, max_value=12, value=7, key="gen_evens") # Max 12 pares
-        num_odds = 15 - num_evens
-        st.sidebar.write(f"Quantidade de números ímpares: {num_odds}")
-        if st.button("Gerar Jogo(s) por Pares/Ímpares"):
-            if num_odds > 13: # Max 13 ímpares
-                st.error("Configuração de pares/ímpares inválida (máximo de 13 ímpares).")
-            else:
-                try:
-                    for _ in range(num_games_to_generate):
-                        generated_games_list.append(generate_numbers_even_odd_based(num_evens, num_odds))
-                except ValueError as e:
-                    st.error(f"Erro ao gerar: {e}")
+    elif generator_type == "Atrasados":
+        draws_ov = st.sidebar.number_input("Concursos para atraso (0=p/ todos)", 0, 1000, 100)
+        topn = st.sidebar.slider("Top N atrasados", 0, 25, 15)
+        num_draws_ov = None if draws_ov == 0 else draws_ov
+        top_val = None if topn == 0 else topn
+        if st.button("Gerar por Atraso"):
+            od = analyze_overdue_numbers(df, dezenas_cols, num_draws_ov)
+            for _ in range(num_games):
+                games.append(generate_numbers_overdue_based(od, top_n_overdue=top_val))
 
-    elif generator_type == "Baseado em Números Atrasados":
-        st.subheader("Gerar Jogo Baseado em Números Atrasados")
-        num_draws_option_overdue_gen = st.sidebar.number_input(
-            "Considerar quantos sorteios anteriores para basear o atraso? (0 para todos)", 
-            min_value=0, 
-            value=100, 
-            step=10,
-            key="overdue_gen_draws_option"
-        )
-        top_n_overdue_option = st.sidebar.slider(
-            "Priorizar quantos dos números mais atrasados? (0 para usar todos com peso)", 
-            min_value=0, max_value=25, value=15, key="top_n_overdue_gen"
-        )
-        num_draws_to_consider_overdue_gen = None if num_draws_option_overdue_gen == 0 else num_draws_option_overdue_gen
-        top_n_overdue_val = None if top_n_overdue_option == 0 else top_n_overdue_option
-
-        if st.button("Gerar Jogo(s) por Atraso"):
-            overdue_data = analyze_overdue_numbers(df, dezenas_cols, num_draws_to_consider=num_draws_to_consider_overdue_gen)
-            try:
-                for _ in range(num_games_to_generate):
-                    generated_games_list.append(generate_numbers_overdue_based(overdue_data, top_n_overdue=top_n_overdue_val))
-            except ValueError as e:
-                st.error(f"Erro ao gerar: {e}")
-
-    elif generator_type == "Baseado em Números Repetidos":
-        st.subheader("Gerar Jogo Baseado em Números Repetidos do Último Sorteio")
-        if len(df) < 1:
-            st.warning("Não há dados suficientes para obter o último sorteio.")
+    elif generator_type == "Repetidos":
+        st.sidebar.markdown("**Repetição Padrão**: geralmente 10 ou 11 números do último sorteio")
+        use_def = st.sidebar.checkbox("Usar repetição padrão (10 ou 11)")
+        last_nums = set(df.iloc[-1][dezenas_cols].values)
+        max_rep = min(15, len(last_nums))
+        if use_def:
+            rep = random.choice([n for n in (10, 11) if n <= max_rep])
+            st.sidebar.write(f"Repetir {rep} números (padrão)")
         else:
-            max_repeat = min(15, len(set(df.iloc[-1][dezenas_cols].values)))
-            num_to_repeat_val = st.sidebar.slider(
-                "Quantos números repetir do último sorteio?", 
-                min_value=0, max_value=max_repeat, value=min(8, max_repeat), key="num_repeat_gen"
-            )
-            if st.button("Gerar Jogo(s) por Repetição"):
-                try:
-                    for _ in range(num_games_to_generate):
-                        generated_games_list.append(generate_numbers_repeated_based(df, dezenas_cols, num_to_repeat_val))
-                except ValueError as e:
-                    st.error(f"Erro ao gerar: {e}")
-    
-    if generated_games_list:
-        st.write("--- Jogos Gerados ---")
-        for i, game in enumerate(generated_games_list):
-            # CORREÇÃO: Converter cada número para int antes de exibir
-            cleaned_game = sorted([int(num) for num in game])
-            st.markdown(f"**Jogo {i+1}:** `{cleaned_game}`")
+            rep = st.sidebar.slider("Qtd. a repetir", 0, max_rep, min(8, max_rep))
+        if st.button("Gerar por Repetidos"):
+            for _ in range(num_games):
+                games.append(generate_numbers_repeated_based(df, dezenas_cols, rep))
+
+    if games:
+        st.header("Jogos Gerados")
+        for idx, g in enumerate(games, start=1):
+            # converter numpy types para int puro
+            numbers = sorted(int(x) for x in g)
+            st.markdown(f"**Jogo {idx}:** {numbers}")
 
 st.sidebar.info(
-    """Esta aplicação analisa dados históricos da Lotofácil e pode gerar sugestões de jogos.
-    Lembre-se que resultados de loterias são aleatórios e análises passadas ou jogos gerados não garantem resultados futuros."""
+    "Esta aplicação analisa dados históricos e gera sugestões. "
+    "Loterias são aleatórias, jogue com responsabilidade."
 )
-
